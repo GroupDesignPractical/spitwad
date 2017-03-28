@@ -12,3 +12,6 @@ apiJS = jsForAPI api $ angular defAngularOptions
 writeJSFiles :: IO ()
 writeJSFiles =
   T.writeFile "static/api.js" apiJS
+
+main :: IO ()
+main = writeJSFiles
