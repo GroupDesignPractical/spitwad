@@ -13,4 +13,4 @@ INSERT INTO "market_data" ("market_name", "date", "datum")
   VALUES ('Crude Oil','2017-03-23T14:23:28.198721371', '4.3');
 INSERT INTO "news_data" VALUES
   ('BBC News', '2017-03-04T00:00:00', '''Defend NHS with all your might'', Corbyn urges demonstrators', 'https://www.theguardian.com/society/2017/mar/04/nhs-funding-cuts-protest-march-london-jeremy-corbyn'),
-  ('BBC News', '2017-03-17T00:00:00', 'Fleeing from Dante''s hell on Mount Etna', 'https://www.theguardian.com/world/2017/mar/17/fleeing-from-dantes-hell-on-mount-etna')
+  ('BBC News', '2017-03-17T00:00:00', 'Fleeing from Dante''s hell on Mount Etna', 'https://www.theguardian.com/world/2017/mar/17/fleeing-from-dantes-hell-on-mount-etna');
