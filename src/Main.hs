@@ -2,15 +2,17 @@ module Main where
 
 import Data.String.Conversions
 import System.Environment
+import qualified System.IO.Error as E
 
 import App
 import Config
 
 main :: IO ()
 main = do
-  args <- getArgs
-  let config = if length args == 1
-               then defaultConfig { connectionString = cs $ head args }
-               else defaultConfig
+  path <- E.tryIOError $ getEnv "SPITWAD_DB_PATH"
+  let config = either
+        (const defaultConfig)
+        (\str -> defaultConfig { connectionString = cs str })
+        path
   run config
 
