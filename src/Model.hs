@@ -18,8 +18,8 @@ import Model.Schema
 jsonKeys :: Map String String
 jsonKeys = M.fromList
   [
-    ("marketDataIntervalTimePeriod", "time_period")
-  , ("marketData", "data")
+    ("stockDataIntervalTimePeriod", "time_period")
+  , ("stockData", "data")
   , ("trendDataIntervalTimePeriod", "time_period")
   , ("trendData", "data")
   ]
@@ -31,13 +31,13 @@ data TimePeriod = TimePeriod
   , splits :: Int
   } deriving (Show, Eq, Generic, ToJSON)
 
-data MarketDataInterval = MarketDataInterval
+data StockDataInterval = StockDataInterval
   {
-    marketDataIntervalTimePeriod :: TimePeriod
-  , marketData :: [Double]
+    stockDataIntervalTimePeriod :: TimePeriod
+  , stockData :: [StockData]
   } deriving (Show, Eq, Generic)
 
-instance ToJSON MarketDataInterval where
+instance ToJSON StockDataInterval where
   toJSON = genericToJSON defaultOptions
     {
       fieldLabelModifier = \k -> M.findWithDefault k k jsonKeys
@@ -46,7 +46,7 @@ instance ToJSON MarketDataInterval where
 data TrendDataInterval = TrendDataInterval
   {
     trendDataIntervalTimePeriod :: TimePeriod
-  , trendData :: [Text]
+  , trendData :: [TrendData]
   } deriving (Show, Eq, Generic)
 
 instance ToJSON TrendDataInterval where
@@ -55,14 +55,8 @@ instance ToJSON TrendDataInterval where
       fieldLabelModifier = \k -> M.findWithDefault k k jsonKeys
     }
 
-instance ToJSON Market where
-  toJSON = String . cs . view marketName
-
 instance ToJSON TrendSource where
   toJSON = String . cs . view trendSourceName
-
-instance ToJSON NewsSource where
-  toJSON = String . cs . view newsSourceName
 
 instance ToJSON NewsData where
   toJSON news = object
@@ -70,5 +64,21 @@ instance ToJSON NewsData where
       "date" .= (news ^. newsDataDate)
     , "headline" .= (news ^. newsDataHeadline)
     , "link" .= (news ^. newsDataLink)
+    , "facebook_reacts" .= FacebookReacts
+        (news ^. newsDataFacebook_react_like)
+        (news ^. newsDataFacebook_react_love)
+        (news ^. newsDataFacebook_react_haha)
+        (news ^. newsDataFacebook_react_wow)
+        (news ^. newsDataFacebook_react_sad)
+        (news ^. newsDataFacebook_react_angry)
     ]
 
+data FacebookReacts = FacebookReacts
+  {
+    like :: Int
+  , love :: Int
+  , haha :: Int
+  , wow :: Int
+  , sad :: Int
+  , angry :: Int
+  } deriving (Show, Eq, Generic, ToJSON)

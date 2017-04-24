@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -18,33 +17,46 @@ import Model.URI()
 
 share [mkPersist sqlSettings {mpsGenerateLenses = True},
        mkMigrate "migrateAll"] [persistLowerCase|
-Market
+Stock json
+  symbol Text
   name Text
-  Primary name
-MarketData
-  marketName MarketId
+  market_cap_group Int
+  icb_supersector Text
+  icb_industry Text
+  Primary symbol
+StockData json
+  stock_symbol StockId
   date UTCTime default=CURRENT_TIMESTAMP
   datum Double
-  Primary marketName date
+  Primary stock_symbol date
   deriving Show Eq
 TrendSource
   name Text
   Primary name
-TrendData
-  trendSourceName TrendSourceId
+TrendData json
+  trend_source_name TrendSourceId
   date UTCTime default=CURRENT_TIMESTAMP
   datum Text
-  Primary trendSourceName date
+  sentiment Double
+  volume Int
+  Primary trend_source_name date
   deriving Show Eq
-NewsSource
+NewsSource json
   name Text
+  facebook_page URI
   Primary name
 NewsData
-  newsSourceName NewsSourceId
+  news_source_name NewsSourceId
   date UTCTime default=CURRENT_TIMESTAMP
   headline Text
   link URI
-  Primary newsSourceName date
+  facebook_react_like Int
+  facebook_react_love Int
+  facebook_react_haha Int
+  facebook_react_wow Int
+  facebook_react_sad Int
+  facebook_react_angry Int
+  Primary news_source_name date
   deriving Show Eq
 |]
 

@@ -50,12 +50,12 @@ runDb q = do
   liftIO $ runSqlite fp q
 
 server :: ServerT API App
-server = getMarkets :<|> getTrendSources :<|> getNewsSources
-    :<|> getMarketDataInterval :<|> getTrendDataInterval :<|> getNewsInterval
-  where getMarkets :: App [Market]
-        getMarkets = do
-          markets <- runDb $ selectList [] []
-          pure $ entityVal <$> markets
+server = getStocks :<|> getTrendSources :<|> getNewsSources
+    :<|> getStockDataInterval :<|> getTrendDataInterval :<|> getNewsInterval
+  where getStocks :: App [Stock]
+        getStocks = do
+          stocks <- runDb $ selectList [] []
+          pure $ entityVal <$> stocks
         getTrendSources :: App [TrendSource]
         getTrendSources = do
           trendSources <- runDb $ selectList [] []
@@ -64,35 +64,35 @@ server = getMarkets :<|> getTrendSources :<|> getNewsSources
         getNewsSources = do
           newsSources <- runDb $ selectList [] []
           pure $ entityVal <$> newsSources
-        getMarketDataInterval :: Maybe MarketId -- market_name
+        getStockDataInterval :: Maybe StockId -- stock_symbol
                               -> Maybe UTCTime -> Maybe UTCTime -- start, end
-                              -> App MarketDataInterval
-        getMarketDataInterval (Just mname) (Just s) (Just e) = do
+                              -> App StockDataInterval
+        getStockDataInterval (Just ssym) (Just s) (Just e) = do
           selected <- runDb $ selectList
-            [MarketDataMarketName ==. mname
-           , MarketDataDate >. s, MarketDataDate <. e]
-            [Asc MarketDataDate]
+            [StockDataStock_symbol ==. ssym
+           , StockDataDate >. s, StockDataDate <. e]
+            [Asc StockDataDate]
           let points = entityVal <$> selected
-          pure MarketDataInterval
+          pure StockDataInterval
             {
-              marketDataIntervalTimePeriod = TimePeriod
+              stockDataIntervalTimePeriod = TimePeriod
                 {
-                  start = points ^? _head . marketDataDate
-                , end = points ^? _last . marketDataDate
+                  start = points ^? _head . stockDataDate
+                , end = points ^? _last . stockDataDate
                 , splits = length selected
                 }
-            , marketData = (^. marketDataDatum) <$> points
+            , stockData = points
             }
-        getMarketDataInterval (Just _) _ _ = throwError
+        getStockDataInterval (Just _) _ _ = throwError
           err400 { errBody = "Bad Request, invalid dates" }
-        getMarketDataInterval _ _ _ = throwError
-          err400 { errBody = "Bad Request, invalid market name" }
+        getStockDataInterval _ _ _ = throwError
+          err400 { errBody = "Bad Request, invalid stock name" }
         getTrendDataInterval :: Maybe TrendSourceId -- trend_source_name
                              -> Maybe UTCTime -> Maybe UTCTime -- start, end
                              -> App TrendDataInterval
         getTrendDataInterval (Just tsname) (Just s) (Just e) = do
           selected <- runDb $ selectList
-            [TrendDataTrendSourceName ==. tsname
+            [TrendDataTrend_source_name ==. tsname
            , TrendDataDate >. s, TrendDataDate <. e]
             [Asc TrendDataDate]
           let points = entityVal <$> selected
@@ -104,7 +104,7 @@ server = getMarkets :<|> getTrendSources :<|> getNewsSources
                 , end = points ^? _last . trendDataDate
                 , splits = length selected
                 }
-            , trendData = (^. trendDataDatum) <$> points
+            , trendData = points
             }
         getTrendDataInterval (Just _) _ _ = throwError
           err400 { errBody = "Bad Request, invalid dates" }
@@ -115,7 +115,7 @@ server = getMarkets :<|> getTrendSources :<|> getNewsSources
                         -> App [NewsData]
         getNewsInterval (Just nsname) (Just s) (Just e) = do
           selected <- runDb $ selectList
-            [NewsDataNewsSourceName ==. nsname
+            [NewsDataNews_source_name ==. nsname
            , NewsDataDate >. s, NewsDataDate <. e]
             [Asc NewsDataDate]
           pure $ entityVal <$> selected

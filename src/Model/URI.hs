@@ -10,6 +10,9 @@ import Network.URI
 instance ToJSON URI where
   toJSON = String . cs . show
 
+instance FromJSON URI where
+  parseJSON = undefined -- unused
+
 instance PersistField URI where
   fromPersistValue (PersistText t) = maybe (Left "failed to parse uri") Right
                                    . parseURI $ cs t

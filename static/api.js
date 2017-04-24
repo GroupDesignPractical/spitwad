@@ -1,8 +1,8 @@
 
-var getMarkets = function($http)
+var getStocks = function($http)
 {
   return $http(
-    { url: '/markets'
+    { url: '/stocks'
     , method: 'GET'
     });
 }
@@ -29,10 +29,10 @@ var getNews_sources = function($http)
 
 
 
-var getMarket = function($http, name, start, end)
+var getStock = function($http, name, start, end)
 {
   return $http(
-    { url: '/market' + '?name=' + encodeURIComponent(name) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
+    { url: '/stock' + '?name=' + encodeURIComponent(name) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
     , method: 'GET'
     });
 }

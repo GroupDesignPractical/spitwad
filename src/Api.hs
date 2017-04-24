@@ -10,12 +10,12 @@ import Servant.API
 
 import Model
 
-type API = "markets" :> Get '[JSON] [Market]
+type API = "stocks" :> Get '[JSON] [Stock]
       :<|> "trend_sources" :> Get '[JSON] [TrendSource]
       :<|> "news_sources" :> Get '[JSON] [NewsSource]
-      :<|> "market" :> QueryParam "name" MarketId
+      :<|> "stock" :> QueryParam "name" StockId
                     :> QueryParam "start" UTCTime :> QueryParam "end" UTCTime
-                    :> Get '[JSON] MarketDataInterval
+                    :> Get '[JSON] StockDataInterval
       :<|> "trends" :> QueryParam "name" TrendSourceId
                     :> QueryParam "start" UTCTime :> QueryParam "end" UTCTime
                     :> Get '[JSON] TrendDataInterval

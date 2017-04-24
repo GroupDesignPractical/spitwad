@@ -1,0 +1,35 @@
+[stock]
+    *symbol {label:"VARCHAR"}
+    name {label:"VARCHAR"}
+    market_cap_group {label:"INTEGER"}
+    icb_supersector {label:"VARCHAR"}
+    icb_industry {label:"VARCHAR"}
+[trend_data]
+    *trend_source_name {label:"VARCHAR"}
+    *date {label:"TIMESTAMP"}
+    datum {label:"VARCHAR"}
+    sentiment {label:"REAL"}
+    volume {label:"INTEGER"}
+[stock_data]
+    *stock_symbol {label:"VARCHAR"}
+    *date {label:"TIMESTAMP"}
+    datum {label:"REAL"}
+[news_data]
+    *news_source_name {label:"VARCHAR"}
+    *date {label:"TIMESTAMP"}
+    headline {label:"VARCHAR"}
+    link {label:"VARCHAR"}
+    facebook_react_like {label:"INTEGER"}
+    facebook_react_love {label:"INTEGER"}
+    facebook_react_haha {label:"INTEGER"}
+    facebook_react_wow {label:"INTEGER"}
+    facebook_react_sad {label:"INTEGER"}
+    facebook_react_angry {label:"INTEGER"}
+[news_source]
+    *name {label:"VARCHAR"}
+    facebook_page {label:"VARCHAR"}
+[trend_source]
+    *name {label:"VARCHAR"}
+trend_source *--? trend_data
+stock *--? stock_data
+news_source *--? news_data
