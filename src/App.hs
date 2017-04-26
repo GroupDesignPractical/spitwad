@@ -12,6 +12,7 @@ import Control.Monad.Reader
 import Control.Monad.Trans.Resource
 import Data.Time
 
+import Network.Wai.Middleware.Cors
 import qualified Network.Wai.Handler.Warp as Warp
 import Database.Persist.Sqlite
 import Servant
@@ -27,7 +28,7 @@ newtype App a = App
               MonadReader Config, MonadError ServantErr, MonadIO)
 
 app :: Config -> Application
-app cfg = serve api $ withConfig cfg
+app cfg = simpleCors (serve api $ withConfig cfg)
 
 withConfig :: Config -> Server API
 withConfig cfg = enter (convertApp cfg) server

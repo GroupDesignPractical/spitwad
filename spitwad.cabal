@@ -39,6 +39,7 @@ executable server
                      , string-conversions
                      , text
                      , time
+                     , wai-cors
                      , warp
   default-language:    Haskell2010
 

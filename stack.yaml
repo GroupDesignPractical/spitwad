@@ -66,4 +66,4 @@ extra-package-dbs: []
 # compiler-check: newer-minor
 nix:
     enable:  true
-    packages: [binutils]
+    packages: [zlib binutils]
