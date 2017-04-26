@@ -1,58 +1,51 @@
-
-var getStocks = function($http)
+app.service('spitwad', function($http) {
+  return ({
+getStocks: function()
 {
   return $http(
     { url: '/stocks'
     , method: 'GET'
     });
 }
-
-
-
-var getTrend_sources = function($http)
+,
+getTrend_sources: function()
 {
   return $http(
     { url: '/trend_sources'
     , method: 'GET'
     });
 }
-
-
-
-var getNews_sources = function($http)
+,
+getNews_sources: function()
 {
   return $http(
     { url: '/news_sources'
     , method: 'GET'
     });
 }
-
-
-
-var getStock = function($http, name, start, end)
+,
+getStock: function(name, start, end)
 {
   return $http(
     { url: '/stock' + '?name=' + encodeURIComponent(name) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
     , method: 'GET'
     });
 }
-
-
-
-var getTrends = function($http, name, start, end)
+,
+getTrends: function(name, start, end)
 {
   return $http(
     { url: '/trends' + '?name=' + encodeURIComponent(name) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
     , method: 'GET'
     });
 }
-
-
-
-var getNews = function($http, name, start, end)
+,
+getNews: function(name, start, end)
 {
   return $http(
     { url: '/news' + '?name=' + encodeURIComponent(name) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
     , method: 'GET'
     });
 }
+});
+});

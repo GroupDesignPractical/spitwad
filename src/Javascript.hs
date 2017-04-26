@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Javascript where
 
 import Data.Text (Text)
@@ -7,7 +8,8 @@ import Servant.JS
 import Api
 
 apiJS :: Text
-apiJS = jsForAPI api $ angular defAngularOptions
+apiJS = jsForAPI api $ angularService defAngularOptions
+  { serviceName = "spitwad" }
 
 writeJSFiles :: IO ()
 writeJSFiles =
