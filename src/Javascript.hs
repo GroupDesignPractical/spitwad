@@ -8,8 +8,9 @@ import Servant.JS
 import Api
 
 apiJS :: Text
-apiJS = jsForAPI api $ angularService defAngularOptions
-  { serviceName = "spitwad" }
+apiJS = undefined
+-- apiJS = jsForAPI api $ angularService defAngularOptions
+--   { serviceName = "spitwad" }
 
 writeJSFiles :: IO ()
 writeJSFiles =

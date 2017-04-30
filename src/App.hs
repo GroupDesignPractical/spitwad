@@ -10,7 +10,11 @@ import Control.Monad.Except
 import Control.Monad.Logger
 import Control.Monad.Reader
 import Control.Monad.Trans.Resource
+import Data.Maybe
+import Data.String.Conversions
 import Data.Time
+import Data.Text (Text)
+import qualified Data.Text.IO as T.IO
 
 import Network.Wai.Middleware.Cors
 import qualified Network.Wai.Handler.Warp as Warp
@@ -20,6 +24,7 @@ import Servant
 import Api
 import Config
 import Model
+import Scrape.Quandl
 
 newtype App a = App
   {
@@ -41,7 +46,8 @@ run cfg = flip runReaderT cfg $ do
   p <- asks port
   fp <- asks connectionString
   runSqlite fp $ runMigration migrateAll
-  -- runReaderT initialiseDb cfg
+  c <- runDb $ count ([] :: [Filter Stock])
+  when (c == 0) $ runReaderT initialiseDb cfg
   liftIO . Warp.run p $ app cfg
 
 runDb :: (MonadReader Config m, MonadIO m)
@@ -53,6 +59,7 @@ runDb q = do
 server :: ServerT API App
 server = getStocks :<|> getTrendSources :<|> getNewsSources
     :<|> getStockDataInterval :<|> getTrendDataInterval :<|> getNewsInterval
+    :<|> updateStockData
   where getStocks :: App [Stock]
         getStocks = do
           stocks <- runDb $ selectList [] []
@@ -65,7 +72,7 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
         getNewsSources = do
           newsSources <- runDb $ selectList [] []
           pure $ entityVal <$> newsSources
-        getStockDataInterval :: Maybe StockId -- stock_symbol
+        getStockDataInterval :: Maybe Text -- stock_symbol
                               -> Maybe UTCTime -> Maybe UTCTime -- start, end
                               -> App StockDataInterval
         getStockDataInterval (Just ssym) (Just s) (Just e) = do
@@ -88,7 +95,7 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
           err400 { errBody = "Bad Request, invalid dates" }
         getStockDataInterval _ _ _ = throwError
           err400 { errBody = "Bad Request, invalid stock name" }
-        getTrendDataInterval :: Maybe TrendSourceId -- trend_source_name
+        getTrendDataInterval :: Maybe Text -- trend_source_name
                              -> Maybe UTCTime -> Maybe UTCTime -- start, end
                              -> App TrendDataInterval
         getTrendDataInterval (Just tsname) (Just s) (Just e) = do
@@ -111,7 +118,7 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
           err400 { errBody = "Bad Request, invalid dates" }
         getTrendDataInterval _ _ _ = throwError
           err400 { errBody = "Bad Request, invalid trend source name" }
-        getNewsInterval :: Maybe NewsSourceId -- news_source_name
+        getNewsInterval :: Maybe Text -- news_source_name
                         -> Maybe UTCTime -> Maybe UTCTime -- start, end
                         -> App [NewsData]
         getNewsInterval (Just nsname) (Just s) (Just e) = do
@@ -124,8 +131,27 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
           err400 { errBody = "Bad Request, invalid dates" }
         getNewsInterval _ _ _ = throwError
           err400 { errBody = "Bad Request, invalid news source name" }
+        updateStockData :: Maybe Text -> Maybe UTCTime -> App Bool
+        updateStockData (Just sym) since = do
+          -- TODO: don't retrieve stock data for values already in db
+          rows <- liftIO $ scrapeStockData (cs sym) since
+          -- TODO: use insertBy and collect failures
+          res <- mapM (runDb . insertUnique) rows
+          pure . and $ map isJust res
+        updateStockData Nothing since = do
+          selected <- runDb $ selectList [] []
+          let stocks = entityVal <$> selected
+              symbols = map (^. stockSymbol) stocks
+          res <- mapM (flip updateStockData since . Just) symbols
+          pure $ and res
 
--- initialiseDb :: (MonadReader Config m, MonadIO m) => m ()
--- initialiseDb = do
---   return ()
+initialiseDb :: (MonadReader Config m, MonadIO m, MonadBaseControl IO m) => m ()
+initialiseDb = do
+  bsp <- asks bootstrapFilePath
+  bootstrap <- liftIO $ T.IO.readFile bsp
+  liftIO $ print "Bootstrapping..."
+  liftIO . putStrLn $ cs bootstrap
+  fp <- asks connectionString
+  runSqlite fp $ rawExecute bootstrap []
+  return ()
 
