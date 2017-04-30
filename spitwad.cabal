@@ -27,6 +27,7 @@ executable server
   build-depends:       base
                      , aeson
                      , containers
+                     , either
                      , http-conduit
                      , lens
                      , monad-logger

@@ -6,6 +6,7 @@ import Data.Aeson
 import Data.Aeson.Types
 import Data.Monoid
 import Data.String.Conversions
+import Data.Text (Text)
 import Data.Time
 import Control.Applicative
 import Network.HTTP.Simple
@@ -42,11 +43,13 @@ instance FromJSON QuandlStockData where
     datasetData <- o .: "dataset_data"
     datasetData .: "data" >>= extract
 
-getQuandlJSON :: String -> Maybe UTCTime -> IO QuandlStockData
-getQuandlJSON sym date = parseRequest
+getQuandlJSON :: String -> Maybe UTCTime -> Maybe Text -> IO QuandlStockData
+getQuandlJSON sym date apiKey = parseRequest
   ("GET https://www.quandl.com/api/v3/datasets/LSE/"
     <> sym <> "/data.json?column_index=1"
-    <> maybe "" (("&start_date=" <>) . formatTime defaultTimeLocale "%F") date)
+    <> maybe "" (("&start_date=" <>) . formatTime defaultTimeLocale "%F") date
+    <> maybe "" (("&api_key=" <>) . cs) apiKey
+  )
   >>= httpJSON
   >>= (pure . getResponseBody)
 
@@ -54,9 +57,9 @@ quandlStockData :: QuandlStock -> [StockData]
 quandlStockData qs = map (uncurry $ StockData (cs $ symbol qs) . unsafeParseYMD)
   $ getQuandlStockData $ dateprice qs
 
-scrapeStockData :: String -> Maybe UTCTime -> IO [StockData]
-scrapeStockData sym date  = getQuandlJSON sym date >>= pure . quandlStockData
-  . QuandlStock sym
+scrapeStockData :: String -> Maybe UTCTime -> Maybe Text -> IO [StockData]
+scrapeStockData sym date apiKey = getQuandlJSON sym date apiKey
+  >>= pure . quandlStockData . QuandlStock sym
 
 unsafeParseYMD :: String -> UTCTime
 unsafeParseYMD = parseTimeOrError False defaultTimeLocale "%F"
@@ -66,4 +69,4 @@ main = do
   args <- getArgs
   let sym = head args
       date = unsafeParseYMD $ head (tail args)
-  scrapeStockData sym (Just date) >>= print
+  scrapeStockData sym (Just date) Nothing >>= print

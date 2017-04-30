@@ -18,7 +18,7 @@ import qualified Data.Text.IO as T.IO
 
 import Network.Wai.Middleware.Cors
 import qualified Network.Wai.Handler.Warp as Warp
-import Database.Persist.Sqlite
+import Database.Persist.Sql
 import Servant
 
 import Api
@@ -44,17 +44,22 @@ convertApp cfg = Nat (flip runReaderT cfg . runApp)
 run :: Config -> IO ()
 run cfg = flip runReaderT cfg $ do
   p <- asks port
-  fp <- asks connectionString
-  runSqlite fp $ runMigration migrateAll
+  pool <- asks connectionPool
+  liftIO $ putStrLn "Initialising"
+  runSqlPool (runMigration migrateAll) pool
+  liftIO $ putStrLn "Migrations done"
   c <- runDb $ count ([] :: [Filter Stock])
   when (c == 0) $ runReaderT initialiseDb cfg
+  liftIO $ putStrLn "Loaded"
+  apiKey <- asks quandlApiKey
+  when (isJust apiKey)
+    . liftIO . putStrLn $ "Using Quandl API key " <> cs (fromJust apiKey)
   liftIO . Warp.run p $ app cfg
 
-runDb :: (MonadReader Config m, MonadIO m)
-      => SqlPersistT (NoLoggingT (ResourceT IO)) a -> m a
+runDb :: (MonadReader Config m, MonadIO m) => SqlPersistT IO a -> m a
 runDb q = do
-  fp <- asks connectionString
-  liftIO $ runSqlite fp q
+  pool <- asks connectionPool
+  liftIO $ runSqlPool q pool
 
 server :: ServerT API App
 server = getStocks :<|> getTrendSources :<|> getNewsSources
@@ -134,7 +139,8 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
         updateStockData :: Maybe Text -> Maybe UTCTime -> App Bool
         updateStockData (Just sym) since = do
           -- TODO: don't retrieve stock data for values already in db
-          rows <- liftIO $ scrapeStockData (cs sym) since
+          apiKey <- asks quandlApiKey
+          rows <- liftIO $ scrapeStockData (cs sym) since apiKey
           -- TODO: use insertBy and collect failures
           res <- mapM (runDb . insertUnique) rows
           pure . and $ map isJust res
@@ -151,7 +157,7 @@ initialiseDb = do
   bootstrap <- liftIO $ T.IO.readFile bsp
   liftIO $ print "Bootstrapping..."
   liftIO . putStrLn $ cs bootstrap
-  fp <- asks connectionString
-  runSqlite fp $ rawExecute bootstrap []
-  return ()
+  pool <- asks connectionPool
+  runSqlPool (rawExecute bootstrap []) pool
+  pure ()
 
