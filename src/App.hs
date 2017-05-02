@@ -24,6 +24,7 @@ import Servant
 import Api
 import Config
 import Model
+import Scrape.NewsAPI
 import Scrape.Quandl
 
 newtype App a = App
@@ -48,12 +49,21 @@ run cfg = flip runReaderT cfg $ do
   liftIO $ putStrLn "Initialising"
   runSqlPool (runMigration migrateAll) pool
   liftIO $ putStrLn "Migrations done"
-  c <- runDb $ count ([] :: [Filter Stock])
-  when (c == 0) $ runReaderT initialiseDb cfg
+  sc <- runDb $ count ([] :: [Filter Stock])
+  when (sc == 0) $ do
+    fp <- asks stockBootstrapFilePath
+    runReaderT (initialiseDb fp) cfg
+  nsc <- runDb $ count ([] :: [Filter NewsSource])
+  when (nsc == 0) $ do
+    fp <- asks newsSourceBootstrapFilePath
+    runReaderT (initialiseDb fp) cfg
   liftIO $ putStrLn "Loaded"
-  apiKey <- asks quandlApiKey
-  when (isJust apiKey)
-    . liftIO . putStrLn $ "Using Quandl API key " <> cs (fromJust apiKey)
+  napiKey <- asks quandlApiKey
+  when (isJust napiKey)
+    . liftIO . putStrLn $ "Using News API key " <> cs (fromJust napiKey)
+  qapiKey <- asks quandlApiKey
+  when (isJust qapiKey)
+    . liftIO . putStrLn $ "Using Quandl API key " <> cs (fromJust qapiKey)
   liftIO . Warp.run p $ app cfg
 
 runDb :: (MonadReader Config m, MonadIO m) => SqlPersistT IO a -> m a
@@ -64,7 +74,7 @@ runDb q = do
 server :: ServerT API App
 server = getStocks :<|> getTrendSources :<|> getNewsSources
     :<|> getStockDataInterval :<|> getTrendDataInterval :<|> getNewsInterval
-    :<|> updateStockData
+    :<|> updateStockData :<|> updateNewsData
   where getStocks :: App [Stock]
         getStocks = do
           stocks <- runDb $ selectList [] []
@@ -126,9 +136,9 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
         getNewsInterval :: Maybe Text -- news_source_name
                         -> Maybe UTCTime -> Maybe UTCTime -- start, end
                         -> App [NewsData]
-        getNewsInterval (Just nsname) (Just s) (Just e) = do
+        getNewsInterval (Just nsaname) (Just s) (Just e) = do
           selected <- runDb $ selectList
-            [NewsDataNews_source_name ==. nsname
+            [NewsDataNews_source_api_name ==. nsaname
            , NewsDataDate >. s, NewsDataDate <. e]
             [Asc NewsDataDate]
           pure $ entityVal <$> selected
@@ -143,21 +153,34 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
           rows <- liftIO $ scrapeStockData (cs sym) since apiKey
           -- TODO: use insertBy and collect failures
           res <- mapM (runDb . insertUnique) rows
-          pure . and $ map isJust res
+          pure . or $ map isJust res
         updateStockData Nothing since = do
           selected <- runDb $ selectList [] []
           let stocks = entityVal <$> selected
               symbols = map (^. stockSymbol) stocks
           res <- mapM (flip updateStockData since . Just) symbols
-          pure $ and res
+          pure $ or res
+        updateNewsData :: Maybe Text -> App Bool
+        updateNewsData (Just aname) = do
+          apiKey <- asks newsApiKey
+          rows <- liftIO $ scrapeNewsData (cs aname) apiKey
+          -- TODO: use insertBy and collect failures
+          res <- mapM (runDb . insertUnique) rows
+          pure . or $ map isJust res
+        updateNewsData Nothing = do
+          selected <- runDb $ selectList [] []
+          let newsSources = entityVal <$> selected
+              apiNames = map (^. newsSourceApi_name) newsSources
+          res <- mapM (updateNewsData . Just) apiNames
+          pure $ or res
 
-initialiseDb :: (MonadReader Config m, MonadIO m, MonadBaseControl IO m) => m ()
-initialiseDb = do
-  bsp <- asks bootstrapFilePath
-  bootstrap <- liftIO $ T.IO.readFile bsp
-  liftIO $ print "Bootstrapping..."
-  liftIO . putStrLn $ cs bootstrap
+initialiseDb :: (MonadReader Config m, MonadIO m, MonadBaseControl IO m) =>
+                FilePath -> m ()
+initialiseDb sqlfp = do
+  sql <- liftIO $ T.IO.readFile sqlfp
+  liftIO . print $ "Bootstrapping..." <> sqlfp
+  -- liftIO . putStrLn $ cs bootstrap
   pool <- asks connectionPool
-  runSqlPool (rawExecute bootstrap []) pool
+  runSqlPool (rawExecute sql []) pool
   pure ()
 

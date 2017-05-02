@@ -14,14 +14,17 @@ data Config = Config
     connectionString :: Text
   , connectionPool :: ConnectionPool
   , port :: Int
-  , bootstrapFilePath :: FilePath
+  , stockBootstrapFilePath :: FilePath
+  , newsSourceBootstrapFilePath :: FilePath
   , quandlApiKey :: Maybe Text
+  , newsApiKey :: Maybe Text
   }
 
 makeConfig :: IO Config
 makeConfig = do
   p <- E.tryIOError $ getEnv "SPITWAD_DB_PATH"
   qapi <- E.tryIOError $ getEnv "SPITWAD_QUANDL_API_KEY"
+  napi <- E.tryIOError $ getEnv "SPITWAD_NEWS_API_KEY"
   let path = either (const ":memory:") cs p
   pool <- runStderrLoggingT $ createSqlitePool path 100
   return Config
@@ -29,7 +32,9 @@ makeConfig = do
       connectionString = path
     , connectionPool = pool
     , port = 3000
-    , bootstrapFilePath = "dump/stock_table_data.sql"
+    , stockBootstrapFilePath = "dump/stock_table_data.sql"
+    , newsSourceBootstrapFilePath = "dump/news_source_table_data.sql"
     , quandlApiKey = cs <$> rightToMaybe qapi
+    , newsApiKey = cs <$> rightToMaybe napi
     }
 

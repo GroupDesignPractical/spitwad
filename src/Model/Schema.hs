@@ -48,14 +48,16 @@ TrendData json
   UniqueTrendData trend_source_name date
   deriving Show Eq
 NewsSource json
+  api_name Text
   name Text
   facebook_page URI
-  Primary name
-  UniqueNewsSource name
+  Primary api_name
+  UniqueNewsSource api_name
 NewsData
-  news_source_name Text
+  news_source_api_name Text
   date UTCTime default=CURRENT_TIMESTAMP
   headline Text
+  description Text
   link URI
   facebook_react_like Int
   facebook_react_love Int
@@ -63,9 +65,9 @@ NewsData
   facebook_react_wow Int
   facebook_react_sad Int
   facebook_react_angry Int
-  Primary news_source_name date
-  Foreign NewsSource fknewssource news_source_name
-  UniqueNewsData news_source_name date
+  Primary news_source_api_name date
+  Foreign NewsSource fknewssource news_source_api_name
+  UniqueNewsData news_source_api_name date
   deriving Show Eq
 |]
 

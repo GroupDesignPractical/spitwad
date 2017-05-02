@@ -14,18 +14,20 @@ import Model
 type API = "stocks" :> Get '[JSON] [Stock]
       :<|> "trend_sources" :> Get '[JSON] [TrendSource]
       :<|> "news_sources" :> Get '[JSON] [NewsSource]
-      :<|> "stock" :> QueryParam "name" Text
+      :<|> "stock" :> QueryParam "symbol" Text
                    :> QueryParam "start" UTCTime :> QueryParam "end" UTCTime
                    :> Get '[JSON] StockDataInterval
-      :<|> "trends" :> QueryParam "name" Text
+      :<|> "trends" :> QueryParam "source" Text
                     :> QueryParam "start" UTCTime :> QueryParam "end" UTCTime
                     :> Get '[JSON] TrendDataInterval
-      :<|> "news" :> QueryParam "name" Text
+      :<|> "news" :> QueryParam "source" Text
                   :> QueryParam "start" UTCTime :> QueryParam "end" UTCTime
                   :> Get '[JSON] [NewsData]
-      :<|> "update_stocks" :> QueryParam "name" Text
+      :<|> "update_stocks" :> QueryParam "symbol" Text
                            :> QueryParam "since" UTCTime
                            :> Post '[JSON] Bool
+      :<|> "update_news" :> QueryParam "source" Text
+                         :> Post '[JSON] Bool
 api :: Proxy API
 api = Proxy
 

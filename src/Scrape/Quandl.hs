@@ -55,7 +55,7 @@ getQuandlJSON sym date apiKey = parseRequest
 
 quandlStockData :: QuandlStock -> [StockData]
 quandlStockData qs = map (uncurry $ StockData (cs $ symbol qs) . unsafeParseYMD)
-  $ getQuandlStockData $ dateprice qs
+  . getQuandlStockData $ dateprice qs
 
 scrapeStockData :: String -> Maybe UTCTime -> Maybe Text -> IO [StockData]
 scrapeStockData sym date apiKey = getQuandlJSON sym date apiKey
