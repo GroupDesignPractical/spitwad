@@ -30,7 +30,7 @@ toTrendData (time, trend) = TrendData "Twitter"
 
 getEntries :: [String] -> [Entry]
 getEntries (time : user : trendJson : xs) = 
-  let localTime = parseTimeOrError False defaultTimeLocale "%a %b %d %T UTC %Y"
+  let localTime = parseTimeOrError False defaultTimeLocale "%a %b %e %T UTC %Y"
                     time
       date = localTimeToUTC utc localTime
       Just trends = decode (cs trendJson) :: Maybe [TwitterTrend]
