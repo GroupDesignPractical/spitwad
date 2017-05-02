@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Scrape.Quandl (scrapeStockData, main) where
+module Scrape.Quandl (scrapeStockData) where
 
 import Data.Aeson
 import Data.Aeson.Types
@@ -63,10 +63,3 @@ scrapeStockData sym date apiKey = getQuandlJSON sym date apiKey
 
 unsafeParseYMD :: String -> UTCTime
 unsafeParseYMD = parseTimeOrError False defaultTimeLocale "%F"
-
-main :: IO ()
-main = do
-  args <- getArgs
-  let sym = head args
-      date = unsafeParseYMD $ head (tail args)
-  scrapeStockData sym (Just date) Nothing >>= print

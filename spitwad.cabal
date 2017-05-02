@@ -70,24 +70,6 @@ executable gen-client
                      , time
   default-language:    Haskell2010
 
-executable scrape-quandl
-  hs-source-dirs:      src
-  main-is:             Scrape/Quandl.hs
-  other-modules:       Model.Schema
-                     , Model.URI
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N -main-is Scrape.Quandl
-  build-depends:       base
-                     , aeson
-                     , http-conduit
-                     , network-uri
-                     , persistent
-                     , persistent-template
-                     , string-conversions
-                     , text
-                     , time
-                     , vector
-  default-language:    Haskell2010
-
 test-suite spec
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
