@@ -24,27 +24,43 @@ getNews_sources: function()
     });
 }
 ,
-getStock: function(name, start, end)
+getStock: function(symbol, start, end)
 {
   return $http(
-    { url: '/stock' + '?name=' + encodeURIComponent(name) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
+    { url: '/stock' + '?symbol=' + encodeURIComponent(symbol) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
     , method: 'GET'
     });
 }
 ,
-getTrends: function(name, start, end)
+getTrends: function(source, start, end)
 {
   return $http(
-    { url: '/trends' + '?name=' + encodeURIComponent(name) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
+    { url: '/trends' + '?source=' + encodeURIComponent(source) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
     , method: 'GET'
     });
 }
 ,
-getNews: function(name, start, end)
+getNews: function(source, start, end)
 {
   return $http(
-    { url: '/news' + '?name=' + encodeURIComponent(name) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
+    { url: '/news' + '?source=' + encodeURIComponent(source) + '&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end)
     , method: 'GET'
+    });
+}
+,
+postUpdate_stocks: function(symbol, since)
+{
+  return $http(
+    { url: '/update_stocks' + '?symbol=' + encodeURIComponent(symbol) + '&since=' + encodeURIComponent(since)
+    , method: 'POST'
+    });
+}
+,
+postUpdate_news: function(source)
+{
+  return $http(
+    { url: '/update_news' + '?source=' + encodeURIComponent(source)
+    , method: 'POST'
     });
 }
 });
