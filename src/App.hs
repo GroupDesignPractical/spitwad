@@ -58,7 +58,7 @@ run cfg = flip runReaderT cfg $ do
     fp <- asks newsSourceBootstrapFilePath
     runReaderT (initialiseDb fp) cfg
   liftIO $ putStrLn "Loaded"
-  napiKey <- asks quandlApiKey
+  napiKey <- asks newsApiKey
   when (isJust napiKey)
     . liftIO . putStrLn $ "Using News API key " <> cs (fromJust napiKey)
   qapiKey <- asks quandlApiKey
