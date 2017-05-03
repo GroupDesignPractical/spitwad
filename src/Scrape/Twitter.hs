@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Scrape.Twitter (convertStoredData, scrapeTwitterTrends) where
+module Scrape.Twitter (scrapeTwitterTrends) where
 
 import Data.Aeson
 import Data.Maybe
@@ -52,20 +52,20 @@ scrapeTwitterTrends tokens credential = getTwitterJSON tokens credential
 
 -- auxiliary functions to insert pre-serialised data
 
-getEntries :: [String] -> [Entry]
-getEntries (time : _ : trendJson : xs) = 
-  let localTime = parseTimeOrError False defaultTimeLocale "%a %b %e %T UTC %Y"
-                    time
-      date = localTimeToUTC utc localTime
-      Just trends = decode (cs trendJson) :: Maybe [TwitterTrend]
- in (date, trends) : getEntries xs
-getEntries _ = []  
-
-convertStoredData :: IO [TrendData]
-convertStoredData = do
-  --TODO: replace file path with the accurate path
-  storedData <- readFile "twitter_trends.json" >>= pure . lines
-  let trends :: [Entry]
-      trends = getEntries storedData
-  pure . map twitterTrendData $ concatMap sequenceA trends
+-- getEntries :: [String] -> [Entry]
+-- getEntries (time : _ : trendJson : xs) =
+--   let localTime = parseTimeOrError False defaultTimeLocale "%a %b %e %T UTC %Y"
+--                     time
+--       date = localTimeToUTC utc localTime
+--       Just trends = decode (cs trendJson) :: Maybe [TwitterTrend]
+--  in (date, trends) : getEntries xs
+-- getEntries _ = []
+--
+-- convertStoredData :: IO [TrendData]
+-- convertStoredData = do
+--   --TODO: replace file path with the accurate path
+--   storedData <- readFile "twitter_trends.json" >>= pure . lines
+--   let trends :: [Entry]
+--       trends = getEntries storedData
+--   pure . map twitterTrendData $ concatMap sequenceA trends
 
