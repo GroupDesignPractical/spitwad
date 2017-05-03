@@ -7,7 +7,7 @@
 [trend_data]
     *trend_source_name {label:"VARCHAR"}
     *date {label:"TIMESTAMP"}
-    datum {label:"VARCHAR"}
+    *datum {label:"VARCHAR"}
     sentiment {label:"REAL"}
     volume {label:"INTEGER"}
 [stock_data]

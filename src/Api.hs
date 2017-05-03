@@ -28,6 +28,7 @@ type API = "stocks" :> Get '[JSON] [Stock]
                            :> Post '[JSON] Bool
       :<|> "update_news" :> QueryParam "source" Text
                          :> Post '[JSON] Bool
+      :<|> "update_trends" :> Post '[JSON] Bool
 api :: Proxy API
 api = Proxy
 

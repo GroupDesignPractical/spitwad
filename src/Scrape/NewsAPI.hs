@@ -14,7 +14,6 @@ import Network.HTTP.Simple
 import Network.URI
 
 import Model.Schema
-import Model.URI
 
 newtype Headlines = Headlines { getArticles :: [NewsArticle] }
 

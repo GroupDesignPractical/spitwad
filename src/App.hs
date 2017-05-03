@@ -7,7 +7,6 @@ module App (app, run) where
 
 import Control.Lens hiding ((<.))
 import Control.Monad.Except
-import Control.Monad.Logger
 import Control.Monad.Reader
 import Control.Monad.Trans.Resource
 import Data.Maybe
@@ -18,6 +17,7 @@ import qualified Data.Text.IO as T.IO
 
 import Network.Wai.Middleware.Cors
 import qualified Network.Wai.Handler.Warp as Warp
+import Web.Authenticate.OAuth
 import Database.Persist.Sql
 import Servant
 
@@ -26,6 +26,7 @@ import Config
 import Model
 import Scrape.NewsAPI
 import Scrape.Quandl
+import Scrape.Twitter
 
 newtype App a = App
   {
@@ -57,6 +58,10 @@ run cfg = flip runReaderT cfg $ do
   when (nsc == 0) $ do
     fp <- asks newsSourceBootstrapFilePath
     runReaderT (initialiseDb fp) cfg
+  tsc <- runDb $ count ([] :: [Filter TrendSource])
+  when (tsc == 0) $ do
+    fp <- asks trendSourceBootstrapFilePath
+    runReaderT (initialiseDb fp) cfg
   liftIO $ putStrLn "Loaded"
   napiKey <- asks newsApiKey
   when (isJust napiKey)
@@ -64,6 +69,21 @@ run cfg = flip runReaderT cfg $ do
   qapiKey <- asks quandlApiKey
   when (isJust qapiKey)
     . liftIO . putStrLn $ "Using Quandl API key " <> cs (fromJust qapiKey)
+  tock <- asks twitterOauthConsumerKey
+  when (isJust tock)
+    . liftIO . putStrLn $ "Using Twitter OAuth consumer key "
+      <> cs (fromJust tock)
+  tocs <- asks twitterOauthConsumerSecret
+  when (isJust tocs)
+    . liftIO . putStrLn $ "Using Twitter OAuth consumer secret"
+      <> cs (fromJust tocs)
+  tot <- asks twitterOauthToken
+  when (isJust tot)
+    . liftIO . putStrLn $ "Using Twitter OAuth token" <> cs (fromJust tot)
+  tots <- asks twitterOauthTokenSecret
+  when (isJust tots)
+    . liftIO . putStrLn $ "Using Twitter OAuth token secret"
+      <> cs (fromJust tots)
   liftIO . Warp.run p $ app cfg
 
 runDb :: (MonadReader Config m, MonadIO m) => SqlPersistT IO a -> m a
@@ -74,7 +94,7 @@ runDb q = do
 server :: ServerT API App
 server = getStocks :<|> getTrendSources :<|> getNewsSources
     :<|> getStockDataInterval :<|> getTrendDataInterval :<|> getNewsInterval
-    :<|> updateStockData :<|> updateNewsData
+    :<|> updateStockData :<|> updateNewsData :<|> updateTrends
   where getStocks :: App [Stock]
         getStocks = do
           stocks <- runDb $ selectList [] []
@@ -173,6 +193,25 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
               apiNames = map (^. newsSourceApi_name) newsSources
           res <- mapM (updateNewsData . Just) apiNames
           pure $ or res
+        updateTrends :: App Bool
+        updateTrends = do
+          tock <- asks twitterOauthConsumerKey
+          tocs <- asks twitterOauthConsumerSecret
+          tot <- asks twitterOauthToken
+          tots <- asks twitterOauthTokenSecret
+          let tokens = newOAuth
+                {
+                  oauthConsumerKey = cs $ fromMaybe "" tock
+                , oauthConsumerSecret = cs $ fromMaybe "" tocs
+                }
+              credential = Credential
+                [
+                  ("oauth_token", cs $ fromMaybe "" tot)
+                , ("oauth_token_secret", cs $ fromMaybe "" tots)
+                ]
+          rows <- liftIO $ scrapeTwitterTrends tokens credential
+          _ <- runDb $ insertMany rows
+          pure True
 
 initialiseDb :: (MonadReader Config m, MonadIO m, MonadBaseControl IO m) =>
                 FilePath -> m ()

@@ -8,7 +8,6 @@ import Control.Lens hiding ((.=))
 import Data.Aeson.Types
 import Data.Map.Strict (Map)
 import Data.String.Conversions
-import Data.Text (Text)
 import Data.Time
 import GHC.Generics
 import qualified Data.Map.Strict as M

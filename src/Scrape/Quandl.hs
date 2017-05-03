@@ -8,9 +8,7 @@ import Data.Monoid
 import Data.String.Conversions
 import Data.Text (Text)
 import Data.Time
-import Control.Applicative
 import Network.HTTP.Simple
-import System.Environment
 import qualified Data.Vector as V
 
 import Model.Schema

@@ -43,9 +43,9 @@ TrendData json
   datum Text
   sentiment Double
   volume Int
-  Primary trend_source_name date
+  Primary trend_source_name date datum
   Foreign TrendSource fktrendsource trend_source_name
-  UniqueTrendData trend_source_name date
+  UniqueTrendData trend_source_name date datum
   deriving Show Eq
 NewsSource json
   api_name Text
