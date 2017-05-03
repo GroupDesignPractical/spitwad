@@ -75,14 +75,14 @@ run cfg = flip runReaderT cfg $ do
       <> cs (fromJust tock)
   tocs <- asks twitterOauthConsumerSecret
   when (isJust tocs)
-    . liftIO . putStrLn $ "Using Twitter OAuth consumer secret"
+    . liftIO . putStrLn $ "Using Twitter OAuth consumer secret "
       <> cs (fromJust tocs)
   tot <- asks twitterOauthToken
   when (isJust tot)
-    . liftIO . putStrLn $ "Using Twitter OAuth token" <> cs (fromJust tot)
+    . liftIO . putStrLn $ "Using Twitter OAuth token " <> cs (fromJust tot)
   tots <- asks twitterOauthTokenSecret
   when (isJust tots)
-    . liftIO . putStrLn $ "Using Twitter OAuth token secret"
+    . liftIO . putStrLn $ "Using Twitter OAuth token secret "
       <> cs (fromJust tots)
   liftIO . Warp.run p $ app cfg
 
