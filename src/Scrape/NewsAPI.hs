@@ -1,9 +1,13 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Scrape.NewsAPI (scrapeNewsData) where
 
+import Control.Exception.Safe
+import Control.Monad.Logger
+import Control.Monad.Trans.Class
 import Data.Aeson
 import Data.Maybe
 import Data.String.Conversions
@@ -29,14 +33,15 @@ instance FromJSON Headlines where
   parseJSON = withObject "response" $ \o ->
     Headlines <$> o .: "articles"
 
-getNewsJSON :: String -> Maybe Text -> IO [NewsArticle]
-getNewsJSON source apiKey = parseRequest
+getNewsJSON :: String -> Maybe Text -> LoggingT IO [NewsArticle]
+getNewsJSON source apiKey = catchAny (parseRequest
   ("GET https://newsapi.org/v1/articles?"
     <> "source=" <> source
     <> maybe "" (("&apiKey=" <>) . cs) apiKey
   )
   >>= httpJSON
-  >>= (pure . getArticles . getResponseBody)
+  >>= pure . getArticles . getResponseBody)
+  (\e -> $(logError) (cs $ show e) >> pure [])
 
 newsAPINewsData :: String -> NewsArticle -> IO NewsData
 newsAPINewsData source na = (\t -> NewsData
@@ -45,6 +50,6 @@ newsAPINewsData source na = (\t -> NewsData
   0 0 0 0 0 0) -- facebook reacts
   <$> getCurrentTime
 
-scrapeNewsData :: String -> Maybe Text -> IO [NewsData]
+scrapeNewsData :: String -> Maybe Text -> LoggingT IO [NewsData]
 scrapeNewsData source apiKey = getNewsJSON source apiKey
-  >>= mapM (newsAPINewsData source)
+  >>= lift . mapM (newsAPINewsData source)

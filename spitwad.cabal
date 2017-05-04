@@ -22,6 +22,7 @@ executable server
                      , Model
                      , Model.Schema
                      , Model.URI
+                     , Scrape.Facebook
                      , Scrape.NewsAPI
                      , Scrape.Quandl
                      , Scrape.Twitter
@@ -30,21 +31,30 @@ executable server
                      , aeson
                      , authenticate-oauth
                      , containers
+                     , ctrie
                      , either
+                     , http-client
+                     , http-client-tls
                      , http-conduit
                      , lens
+                     , lifted-async
+                     , monad-control
                      , monad-logger
+                     , monad-loops
                      , mtl
                      , network-uri
                      , persistent
                      , persistent-sqlite >= 2.6.2
                      , persistent-template
                      , resourcet
+                     , safe-exceptions
                      , servant
                      , servant-server
                      , string-conversions
                      , text
                      , time
+                     , transformers
+                     , transformers-base
                      , wai-cors
                      , warp
                      , vector

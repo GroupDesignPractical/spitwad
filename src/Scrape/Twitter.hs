@@ -6,7 +6,6 @@ module Scrape.Twitter (scrapeTwitterTrends) where
 
 import Data.Aeson
 import Data.Maybe
-import Data.String.Conversions
 import Data.Time
 import Data.Text (Text)
 import GHC.Generics

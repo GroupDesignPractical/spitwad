@@ -1,14 +1,23 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
-module App (app, run) where
+module App (run) where
 
-import Control.Lens hiding ((<.))
+import Prelude hiding ((.))
+import Control.Category
+import Control.Concurrent.Async.Lifted
+import Control.Concurrent.QSem
+import Control.Lens hiding ((<.), like)
+import Control.Monad.Base
 import Control.Monad.Except
+import Control.Monad.Logger
 import Control.Monad.Reader
-import Control.Monad.Trans.Resource
+import Control.Monad.Trans.Control
 import Data.Maybe
 import Data.String.Conversions
 import Data.Time
@@ -24,32 +33,42 @@ import Servant
 import Api
 import Config
 import Model
+import Scrape.Facebook
 import Scrape.NewsAPI
 import Scrape.Quandl
 import Scrape.Twitter
 
+type LoggingHandler = ExceptT ServantErr (LoggingT IO)
+
 newtype App a = App
   {
-    runApp :: ReaderT Config Handler a
+    runApp :: ReaderT Config LoggingHandler a
   } deriving (Functor, Applicative, Monad,
-              MonadReader Config, MonadError ServantErr, MonadIO)
+              MonadLogger, MonadReader Config, MonadError ServantErr, MonadIO,
+              MonadBase IO)
+
+instance MonadBaseControl IO App where
+  type StM App a = Either ServantErr a
+  liftBaseWith f = App (liftBaseWith (\g -> f (g . runApp)))
+  restoreM st = App (restoreM st)
 
 app :: Config -> Application
-app cfg = simpleCors (serve api $ withConfig cfg)
+app = simpleCors . serve api . withConfig
 
 withConfig :: Config -> Server API
-withConfig cfg = enter (convertApp cfg) server
+withConfig = flip enter server . convertApp
 
 convertApp :: Config -> App :~> Handler
-convertApp cfg = Nat (flip runReaderT cfg . runApp)
+convertApp cfg = hoistNat (Nat runStdoutLoggingT)
+                 . Nat (flip runReaderT cfg . runApp)
 
 run :: Config -> IO ()
-run cfg = flip runReaderT cfg $ do
+run cfg = runStdoutLoggingT . flip runReaderT cfg $ do
   p <- asks port
   pool <- asks connectionPool
-  liftIO $ putStrLn "Initialising"
+  $(logInfo) "Initialising"
   runSqlPool (runMigration migrateAll) pool
-  liftIO $ putStrLn "Migrations done"
+  $(logInfo) "Migrations done"
   sc <- runDb $ count ([] :: [Filter Stock])
   when (sc == 0) $ do
     fp <- asks stockBootstrapFilePath
@@ -62,28 +81,32 @@ run cfg = flip runReaderT cfg $ do
   when (tsc == 0) $ do
     fp <- asks trendSourceBootstrapFilePath
     runReaderT (initialiseDb fp) cfg
-  liftIO $ putStrLn "Loaded"
+  $(logInfo) "Loaded"
   napiKey <- asks newsApiKey
   when (isJust napiKey)
-    . liftIO . putStrLn $ "Using News API key " <> cs (fromJust napiKey)
+    . $(logInfo) $ "Using News API key " <> cs (fromJust napiKey)
   qapiKey <- asks quandlApiKey
   when (isJust qapiKey)
-    . liftIO . putStrLn $ "Using Quandl API key " <> cs (fromJust qapiKey)
+    . $(logInfo) $ "Using Quandl API key " <> cs (fromJust qapiKey)
   tock <- asks twitterOauthConsumerKey
   when (isJust tock)
-    . liftIO . putStrLn $ "Using Twitter OAuth consumer key "
+    . $(logInfo) $ "Using Twitter OAuth consumer key "
       <> cs (fromJust tock)
   tocs <- asks twitterOauthConsumerSecret
   when (isJust tocs)
-    . liftIO . putStrLn $ "Using Twitter OAuth consumer secret "
+    . $(logInfo) $ "Using Twitter OAuth consumer secret "
       <> cs (fromJust tocs)
   tot <- asks twitterOauthToken
   when (isJust tot)
-    . liftIO . putStrLn $ "Using Twitter OAuth token " <> cs (fromJust tot)
+    . $(logInfo) $ "Using Twitter OAuth token " <> cs (fromJust tot)
   tots <- asks twitterOauthTokenSecret
   when (isJust tots)
-    . liftIO . putStrLn $ "Using Twitter OAuth token secret "
+    . $(logInfo) $ "Using Twitter OAuth token secret "
       <> cs (fromJust tots)
+  fbat <- asks facebookAccessToken
+  when (isJust fbat)
+    . $(logInfo) $ "Using Facebook access token "
+      <> cs (fromJust fbat)
   liftIO . Warp.run p $ app cfg
 
 runDb :: (MonadReader Config m, MonadIO m) => SqlPersistT IO a -> m a
@@ -183,16 +206,45 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
         updateNewsData :: Maybe Text -> App Bool
         updateNewsData (Just aname) = do
           apiKey <- asks newsApiKey
-          rows <- liftIO $ scrapeNewsData (cs aname) apiKey
+          ft <- asks facebookAccessToken
+          Just ns <- runDb $ selectFirst [NewsSourceApi_name ==. aname] []
+          let np = cs . filter (/= '/') . uriPath
+                $ entityVal ns ^. newsSourceFacebook_page
+          rows <- liftIO . runStdoutLoggingT $ scrapeNewsData (cs aname) apiKey
+          rows' <- liftIO . runStdoutLoggingT $ populateReacts ft np rows
           -- TODO: use insertBy and collect failures
-          res <- mapM (runDb . insertUnique) rows
+          res <- mapM (runDb . insertUnique) rows'
           pure . or $ map isJust res
         updateNewsData Nothing = do
           selected <- runDb $ selectList [] []
           let newsSources = entityVal <$> selected
               apiNames = map (^. newsSourceApi_name) newsSources
-          res <- mapM (updateNewsData . Just) apiNames
+          n <- asks nworkers
+          sem <- liftIO $ newQSem n
+          res <- mapConcurrently (\x -> liftIO (waitQSem sem)
+                                     >> updateNewsData (Just x)
+                                     >>= \y -> liftIO (signalQSem sem)
+                                            >> pure y) apiNames
           pure $ or res
+        populateReacts :: Maybe Text -> Text -> [NewsData]
+                       -> LoggingT IO [NewsData]
+        populateReacts ft np nds = do
+          reacts <- getReacts ft np $ map (^. newsDataLink) nds
+          zipWithM (\nd -> maybe ($(logError) ("\x1b[31mNo reacts found for "
+                                    <> nd ^. newsDataHeadline <> "\x1b[0m")
+                                    >> pure nd
+                                 )
+                          (\r ->
+                            $(logInfo) ("\x1b[32mGot reacts " <> cs (show r)
+                              <> " for " <> nd ^.newsDataHeadline <> "\x1b[0m")
+                            >> pure (nd
+                                & newsDataFacebook_react_like .~ like r
+                                & newsDataFacebook_react_love .~ love r
+                                & newsDataFacebook_react_haha .~ haha r
+                                & newsDataFacebook_react_wow .~ wow r
+                                & newsDataFacebook_react_sad .~ sad r
+                                & newsDataFacebook_react_angry .~ angry r)
+                          )) nds reacts
         updateTrends :: App Bool
         updateTrends = do
           tock <- asks twitterOauthConsumerKey
@@ -213,12 +265,12 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
           _ <- runDb $ insertMany rows
           pure True
 
-initialiseDb :: (MonadReader Config m, MonadIO m, MonadBaseControl IO m) =>
-                FilePath -> m ()
+initialiseDb :: (MonadLogger m, MonadReader Config m, MonadIO m,
+                 MonadBaseControl IO m) => FilePath -> m ()
 initialiseDb sqlfp = do
   sql <- liftIO $ T.IO.readFile sqlfp
-  liftIO . print $ "Bootstrapping..." <> sqlfp
-  -- liftIO . putStrLn $ cs bootstrap
+  $(logInfo) $ "Bootstrapping..." <> cs sqlfp
+  -- $(logInfo) $ cs sql
   pool <- asks connectionPool
   runSqlPool (rawExecute sql []) pool
   pure ()
