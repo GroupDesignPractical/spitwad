@@ -12,6 +12,7 @@ import Prelude hiding ((.))
 import Control.Category
 import Control.Concurrent.Async.Lifted
 import Control.Concurrent.QSem
+import Control.Exception.Safe hiding (Handler)
 import Control.Lens hiding ((<.), like)
 import Control.Monad.Base
 import Control.Monad.Except
@@ -45,7 +46,7 @@ newtype App a = App
     runApp :: ReaderT Config LoggingHandler a
   } deriving (Functor, Applicative, Monad,
               MonadLogger, MonadReader Config, MonadError ServantErr, MonadIO,
-              MonadBase IO)
+              MonadBase IO, MonadCatch, MonadThrow)
 
 instance MonadBaseControl IO App where
   type StM App a = Either ServantErr a
@@ -109,10 +110,12 @@ run cfg = runStdoutLoggingT . flip runReaderT cfg $ do
       <> cs (fromJust fbat)
   liftIO . Warp.run p $ app cfg
 
-runDb :: (MonadReader Config m, MonadIO m) => SqlPersistT IO a -> m a
-runDb q = do
+runDb :: (MonadCatch m, MonadIO m, MonadLogger m, MonadReader Config m)
+      => SqlPersistT IO a -> m a
+runDb q = catchAny (do
   pool <- asks connectionPool
-  liftIO $ runSqlPool q pool
+  liftIO $ runSqlPool q pool)
+  (\e -> $(logError) (cs $ show e) >> runDb q)
 
 server :: ServerT API App
 server = getStocks :<|> getTrendSources :<|> getNewsSources
