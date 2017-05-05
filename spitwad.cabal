@@ -16,7 +16,8 @@ cabal-version:       >=1.10
 executable server
   hs-source-dirs:      src
   main-is:             Main.hs
-  other-modules:       Api
+  other-modules:       Analyse.Sentiment
+                     , Api
                      , App
                      , Config
                      , Model
@@ -36,6 +37,7 @@ executable server
                      , http-client
                      , http-client-tls
                      , http-conduit
+                     , http-types
                      , lens
                      , lifted-async
                      , monad-control
@@ -46,6 +48,7 @@ executable server
                      , persistent
                      , persistent-sqlite >= 2.6.2
                      , persistent-template
+                     , random
                      , resourcet
                      , safe-exceptions
                      , servant

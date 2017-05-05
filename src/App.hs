@@ -10,8 +10,8 @@ module App (run) where
 
 import Prelude hiding ((.))
 import Control.Category
+import Control.Concurrent
 import Control.Concurrent.Async.Lifted
-import Control.Concurrent.QSem
 import Control.Exception.Safe hiding (Handler)
 import Control.Lens hiding ((<.), like)
 import Control.Monad.Base
@@ -24,13 +24,16 @@ import Data.String.Conversions
 import Data.Time
 import Data.Text (Text)
 import qualified Data.Text.IO as T.IO
+import System.Random
 
+import Network.HTTP.Types.URI
 import Network.Wai.Middleware.Cors
 import qualified Network.Wai.Handler.Warp as Warp
 import Web.Authenticate.OAuth
 import Database.Persist.Sql
 import Servant
 
+import Analyse.Sentiment
 import Api
 import Config
 import Model
@@ -45,8 +48,8 @@ newtype App a = App
   {
     runApp :: ReaderT Config LoggingHandler a
   } deriving (Functor, Applicative, Monad,
-              MonadLogger, MonadReader Config, MonadError ServantErr, MonadIO,
-              MonadBase IO, MonadCatch, MonadThrow)
+              MonadBase IO, MonadCatch, MonadError ServantErr, MonadIO,
+              MonadLogger, MonadReader Config, MonadThrow)
 
 instance MonadBaseControl IO App where
   type StM App a = Either ServantErr a
@@ -91,23 +94,22 @@ run cfg = runStdoutLoggingT . flip runReaderT cfg $ do
     . $(logInfo) $ "Using Quandl API key " <> cs (fromJust qapiKey)
   tock <- asks twitterOauthConsumerKey
   when (isJust tock)
-    . $(logInfo) $ "Using Twitter OAuth consumer key "
-      <> cs (fromJust tock)
+    . $(logInfo) $ "Using Twitter OAuth consumer key " <> cs (fromJust tock)
   tocs <- asks twitterOauthConsumerSecret
   when (isJust tocs)
-    . $(logInfo) $ "Using Twitter OAuth consumer secret "
-      <> cs (fromJust tocs)
+    . $(logInfo) $ "Using Twitter OAuth consumer secret " <> cs (fromJust tocs)
   tot <- asks twitterOauthToken
   when (isJust tot)
     . $(logInfo) $ "Using Twitter OAuth token " <> cs (fromJust tot)
   tots <- asks twitterOauthTokenSecret
   when (isJust tots)
-    . $(logInfo) $ "Using Twitter OAuth token secret "
-      <> cs (fromJust tots)
+    . $(logInfo) $ "Using Twitter OAuth token secret " <> cs (fromJust tots)
   fbat <- asks facebookAccessToken
   when (isJust fbat)
-    . $(logInfo) $ "Using Facebook access token "
-      <> cs (fromJust fbat)
+    . $(logInfo) $ "Using Facebook access token " <> cs (fromJust fbat)
+  iapiKey <- asks indicoApiKey
+  when (isJust iapiKey)
+    . $(logInfo) $ "Using Indico API key " <> cs (fromJust iapiKey)
   liftIO . Warp.run p $ app cfg
 
 runDb :: (MonadCatch m, MonadIO m, MonadLogger m, MonadReader Config m)
@@ -115,7 +117,10 @@ runDb :: (MonadCatch m, MonadIO m, MonadLogger m, MonadReader Config m)
 runDb q = catchAny (do
   pool <- asks connectionPool
   liftIO $ runSqlPool q pool)
-  (\e -> $(logError) (cs $ show e) >> runDb q)
+  (\e -> $(logError) (cs $ show e)
+    >> liftIO (randomRIO (250000, 3000000)) -- retry after (0.25, 3) seconds
+    >>= liftIO . threadDelay
+    >> runDb q)
 
 server :: ServerT API App
 server = getStocks :<|> getTrendSources :<|> getNewsSources
@@ -208,17 +213,20 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
           pure $ or res
         updateNewsData :: Maybe Text -> App Bool
         updateNewsData (Just aname) = do
+          $(logInfo) $ "\x1b[35mUpdating " <> aname <> " \x1b[0m"
           apiKey <- asks newsApiKey
           ft <- asks facebookAccessToken
           Just ns <- runDb $ selectFirst [NewsSourceApi_name ==. aname] []
           let np = cs . filter (/= '/') . uriPath
                 $ entityVal ns ^. newsSourceFacebook_page
-          rows <- liftIO . runStdoutLoggingT $ scrapeNewsData (cs aname) apiKey
-          rows' <- liftIO . runStdoutLoggingT $ populateReacts ft np rows
+          rows <- scrapeNewsData (cs aname) apiKey
+          rows' <- populateReacts ft np rows
           -- TODO: use insertBy and collect failures
           res <- mapM (runDb . insertUnique) rows'
+          $(logInfo) $ "\x1b[35m" <> aname <> " update done \x1b[0m"
           pure . or $ map isJust res
         updateNewsData Nothing = do
+          $(logInfo) "\x1b[33mUpdating all news\x1b[0m"
           selected <- runDb $ selectList [] []
           let newsSources = entityVal <$> selected
               apiNames = map (^. newsSourceApi_name) newsSources
@@ -228,9 +236,11 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
                                      >> updateNewsData (Just x)
                                      >>= \y -> liftIO (signalQSem sem)
                                             >> pure y) apiNames
+          $(logInfo) "\x1b[33mNews update done\x1b[0m"
           pure $ or res
-        populateReacts :: Maybe Text -> Text -> [NewsData]
-                       -> LoggingT IO [NewsData]
+        populateReacts :: (MonadBaseControl IO m, MonadCatch m, MonadIO m,
+                           MonadLogger m)
+                       => Maybe Text -> Text -> [NewsData] -> m [NewsData]
         populateReacts ft np nds = do
           reacts <- getReacts ft np $ map (^. newsDataLink) nds
           zipWithM (\nd -> maybe ($(logError) ("\x1b[31mNo reacts found for "
@@ -250,10 +260,12 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
                           )) nds reacts
         updateTrends :: App Bool
         updateTrends = do
+          $(logInfo) "\x1b[35mUpdating trends\x1b[0m"
           tock <- asks twitterOauthConsumerKey
           tocs <- asks twitterOauthConsumerSecret
           tot <- asks twitterOauthToken
           tots <- asks twitterOauthTokenSecret
+          apiKey <- asks indicoApiKey
           let tokens = newOAuth
                 {
                   oauthConsumerKey = cs $ fromMaybe "" tock
@@ -265,8 +277,31 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
                 , ("oauth_token_secret", cs $ fromMaybe "" tots)
                 ]
           rows <- liftIO $ scrapeTwitterTrends tokens credential
-          _ <- runDb $ insertMany rows
+          rows' <- mapConcurrently (tweetSentiment tokens credential apiKey)
+                                   rows
+          _ <- runDb $ insertMany rows'
+          $(logInfo) "\x1b[35mTrend update done\x1b[0m"
           pure True
+        tweetSentiment :: (MonadIO m, MonadLogger m)
+                       => OAuth -> Credential -> Maybe Text
+                       -> TrendData -> m TrendData
+        tweetSentiment tokens credential apiKey td = do
+          let trend = td ^. trendDataDatum
+          $(logInfo) $ "\x1b[34mGetting tweets for " <> trend <> "\x1b[0m"
+          tweets <- liftIO . getTweets tokens credential . cs . urlEncode True
+                      $ cs trend
+          if null tweets
+            then do $(logError) $ "\x1b[31mNo tweets found for " <> trend
+                                    <> "\x1b[0m"
+                    pure td
+            else do -- $(logInfo) $ "\x1b[34mGot tweets " <> cs (show tweets)
+                                    -- <> "\x1b[0m"
+                    sentiments <- liftIO $ analyseSentiments apiKey tweets
+                    let average = sum sentiments /
+                                    fromIntegral (length sentiments)
+                    $(logInfo) $ "\x1b[34mGot sentiment " <> cs (show average)
+                                    <> " for " <> trend <> "\x1b[0m"
+                    pure $ td & trendDataSentiment .~ average
 
 initialiseDb :: (MonadLogger m, MonadReader Config m, MonadIO m,
                  MonadBaseControl IO m) => FilePath -> m ()

@@ -2,10 +2,11 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Scrape.Twitter (scrapeTwitterTrends) where
+module Scrape.Twitter (scrapeTwitterTrends, getTweets) where
 
 import Data.Aeson
 import Data.Maybe
+import Data.String.Conversions
 import Data.Time
 import Data.Text (Text)
 import GHC.Generics
@@ -22,13 +23,26 @@ data TwitterTrend = TwitterTrend
   ,  name :: Text
   } deriving (Show, Generic, FromJSON)
 
+data Tweet = Tweet
+  {
+    text :: Text
+  } deriving (Show, Generic, FromJSON)
+
 newtype TwitterResponse = TwitterResponse
   {
     getTwitterResponse :: [TwitterTrend]
   } deriving (Show)
 
+newtype RetrievedTweets = RetrievedTweets
+  {
+    getRetrievedTweets :: [Tweet]
+  } deriving (Show)
+
 instance FromJSON TwitterResponse where
   parseJSON = withObject "response" $ \o -> TwitterResponse <$> o .: "trends"
+
+instance FromJSON RetrievedTweets where
+  parseJSON = withObject "response" $ \o -> RetrievedTweets <$> o .: "statuses"
 
 twitterTrendData :: (UTCTime, TwitterTrend) -> TrendData
 twitterTrendData (time, trend) = TrendData "Twitter"
@@ -36,6 +50,13 @@ twitterTrendData (time, trend) = TrendData "Twitter"
                                            (name trend)
                                            0.5 -- no sentiments stored so far
                                            (fromMaybe 0 $ tweet_volume trend)
+
+getTweets :: OAuth -> Credential -> Text -> IO [Text]
+getTweets tokens credential query = parseRequest
+  ("GET https://api.twitter.com/1.1/search/tweets.json?q=" <> cs query)
+  >>= signOAuth tokens credential
+  >>= httpJSON
+  >>= pure . map text . getRetrievedTweets . getResponseBody
 
 getTwitterJSON :: OAuth -> Credential -> IO Entry
 getTwitterJSON tokens credential = parseRequest

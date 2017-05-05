@@ -6,8 +6,8 @@
 module Scrape.NewsAPI (scrapeNewsData) where
 
 import Control.Exception.Safe
+import Control.Monad.IO.Class
 import Control.Monad.Logger
-import Control.Monad.Trans.Class
 import Data.Aeson
 import Data.Maybe
 import Data.String.Conversions
@@ -33,7 +33,8 @@ instance FromJSON Headlines where
   parseJSON = withObject "response" $ \o ->
     Headlines <$> o .: "articles"
 
-getNewsJSON :: String -> Maybe Text -> LoggingT IO [NewsArticle]
+getNewsJSON :: (MonadCatch m, MonadIO m, MonadLogger m)
+            => String -> Maybe Text -> m [NewsArticle]
 getNewsJSON source apiKey = catchAny (parseRequest
   ("GET https://newsapi.org/v1/articles?"
     <> "source=" <> source
@@ -50,6 +51,7 @@ newsAPINewsData source na = (\t -> NewsData
   0 0 0 0 0 0) -- facebook reacts
   <$> getCurrentTime
 
-scrapeNewsData :: String -> Maybe Text -> LoggingT IO [NewsData]
+scrapeNewsData :: (MonadCatch m, MonadIO m, MonadLogger m)
+               => String -> Maybe Text -> m [NewsData]
 scrapeNewsData source apiKey = getNewsJSON source apiKey
-  >>= lift . mapM (newsAPINewsData source)
+  >>= liftIO . mapM (newsAPINewsData source)

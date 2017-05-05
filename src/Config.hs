@@ -24,6 +24,7 @@ data Config = Config
   , twitterOauthToken :: Maybe Text
   , twitterOauthTokenSecret :: Maybe Text
   , facebookAccessToken :: Maybe Text
+  , indicoApiKey :: Maybe Text
   }
 
 makeConfig :: IO Config
@@ -37,6 +38,7 @@ makeConfig = do
   tot <- lookupEnv "SPITWAD_TWITTER_OAUTH_TOKEN"
   tots <- lookupEnv "SPITWAD_TWITTER_OAUTH_TOKEN_SECRET"
   fbat <- lookupEnv "SPITWAD_FACEBOOK_ACCESS_TOKEN"
+  iapi <- lookupEnv "SPITWAD_INDICO_API_KEY"
   pool <- runNoLoggingT $ createSqlitePool (cs p) 100
   return Config
     {
@@ -54,5 +56,6 @@ makeConfig = do
     , twitterOauthToken = cs <$> tot
     , twitterOauthTokenSecret = cs <$> tots
     , facebookAccessToken = cs <$> fbat
+    , indicoApiKey = cs <$> iapi
     }
 
