@@ -6,6 +6,7 @@
 module Scrape.Facebook (getReacts) where
 
 import Control.Concurrent.Async.Lifted
+import Control.Concurrent.MVar
 import Control.Exception.Safe
 import Control.Monad.IO.Class
 import Control.Monad.Logger
@@ -15,7 +16,6 @@ import Control.Monad.Trans.Maybe
 import Data.Aeson
 import Data.Aeson.Types
 import qualified Control.Concurrent.Map as M
-import Data.IORef
 import Data.Maybe
 import Data.String.Conversions
 import Data.Text (Text)
@@ -33,9 +33,6 @@ data Posts = Posts
     _data :: [Post]
   , _paging :: Paging
   } deriving (Show, Generic)
-
-emptyPosts :: Posts
-emptyPosts = Posts [] $ Paging Nothing Nothing
 
 data Post = Post
   {
@@ -70,9 +67,9 @@ instance FromJSON FacebookReacts where
                    <*> (hahas .: "total_count") <*> (wows .: "total_count")
                    <*> (sads .: "total_count")  <*> (angrys .: "total_count")
 
-getPosts :: (MonadCatch m, MonadIO m, MonadLogger m)
+getPosts :: (MonadIO m, MonadLogger m, MonadThrow m)
          => Maybe Text -> Text -> UTCTime -> m Posts
-getPosts apiToken newspage date = catchAny (parseRequest
+getPosts apiToken newspage date = parseRequest
   ("GET https://graph.facebook.com/v2.9/" <> cs newspage
     <> "/posts?fields=link&format=json&limit=100"
     <> maybe "" (("&access_token=" <>) . cs) apiToken
@@ -80,53 +77,53 @@ getPosts apiToken newspage date = catchAny (parseRequest
     <> "&until=" <> addTime (2*24*60*60)
   )
   >>= httpJSON
-  >>= pure . getResponseBody)
-  (\e -> $(logError) (cs $ show e) >> pure emptyPosts)
+  >>= pure . getResponseBody
     where
       addTime :: Integer -> String
       addTime = formatTime defaultTimeLocale "%F" . flip addUTCTime date
                                                   . fromIntegral
 
-unshortenUrl :: (MonadCatch m, MonadIO m, MonadLogger m)
+unshortenUrl :: (MonadIO m, MonadLogger m, MonadThrow m)
              => URI -> m Text
-unshortenUrl url = catchAny (do
+unshortenUrl url = do
   manager <- liftIO $ C.newManager C.TLS.tlsManagerSettings
   req <- liftIO . C.parseRequest $ show url
   hres <- liftIO $ C.responseOpenHistory req manager
   let freq = C.hrFinalRequest hres
-  pure . cs $ C.path freq)
-  (\e -> $(logError) (cs $ show e) >> pure "")
+  pure . cs $ C.path freq
 
-crawlPosts :: (MonadBaseControl IO m, MonadCatch m, MonadIO m, MonadLogger m)
+crawlPosts :: (MonadCatch m, MonadBaseControl IO m, MonadIO m, MonadLogger m,
+               MonadThrow m)
            => M.Map Text Text -> Maybe Text -> Text -> UTCTime -> m ()
 crawlPosts m apiToken newspage date = do
   posts <- getPosts apiToken newspage date
-  $(logInfo) $ "\x1b[32mCrawling page 0 of " <> cs newspage <> "\x1b[0m"
-  mapConcurrently_ (\x -> do
+  $(logInfo) $ "\x1b[32mCrawling page 0 of " <> newspage <> "\x1b[0m"
+  mapConcurrently_ (\x -> catchAny (do
     p <- unshortenUrl $ _link x
-    liftIO $ M.insert p (_id x) m
+    liftIO $ M.insert p (_id x) m)
+    (\e -> $(logError) (cs $ show e))
     ) $ _data posts
-  _i <- liftIO $ newIORef (1 :: Int)
-  _n <- liftIO $ newIORef . _next $ _paging posts
+  _i <- liftIO $ newMVar (1 :: Int)
+  _n <- liftIO $ newMVar $! _next $ _paging posts
   whileM_
     (do
-    i <- liftIO $ readIORef _i
-    n <- liftIO $ readIORef _n
+    i <- liftIO $ readMVar _i
+    n <- liftIO $ readMVar _n
     pure $ i <= 15 && isJust n
     ) (do
-      i <- liftIO $ readIORef _i
+      i <- liftIO $ takeMVar _i
       $(logInfo) $ "\x1b[32mCrawling page " <> cs (show i)
-                    <> " of " <> cs newspage <> "\x1b[0m"
-      Just n <- liftIO $ readIORef _n
-      nposts <- catchAny
-        (liftIO $ parseRequest (cs n) >>= httpJSON >>= pure . getResponseBody)
-        (\e -> $(logError) (cs $ show e) >> pure emptyPosts)
-      mapConcurrently_ (\x -> do
+                    <> " of " <> newspage <> "\x1b[0m"
+      Just n <- liftIO $ takeMVar _n
+      nposts <- liftIO $ parseRequest (cs n) >>= httpJSON
+                                             >>= pure . getResponseBody
+      mapConcurrently_ (\x -> catchAny (do
         p <- unshortenUrl $ _link x
-        liftIO $ M.insert p (_id x) m
+        liftIO $ M.insert p (_id x) m)
+        (\e -> $(logError) (cs $ show e))
         ) $ _data nposts
-      liftIO $ modifyIORef' _i (+1)
-      liftIO . writeIORef _n . _next $ _paging nposts
+      liftIO . putMVar _i $! i + 1
+      liftIO . putMVar _n $! _next $ _paging nposts
      )
 
 getReacts :: (MonadBaseControl IO m, MonadCatch m, MonadIO m, MonadLogger m)
@@ -134,7 +131,8 @@ getReacts :: (MonadBaseControl IO m, MonadCatch m, MonadIO m, MonadLogger m)
 getReacts apiToken newspage links = do
   m <- liftIO M.empty
   date <- liftIO getCurrentTime
-  crawlPosts m apiToken newspage date
+  catchAny (crawlPosts m apiToken newspage date)
+           (\e -> $(logError) (cs $ show e))
   mapConcurrently (runMaybeT . getReact m apiToken) links
 
 getReact :: (MonadBaseControl IO m, MonadIO m, MonadLogger m)
