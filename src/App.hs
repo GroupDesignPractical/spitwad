@@ -203,17 +203,31 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
           err400 { errBody = "Bad Request, invalid news source name" }
         updateStockData :: Maybe Text -> Maybe UTCTime -> App Bool
         updateStockData (Just sym) since = do
+          $(logInfo) $ "\x1b[35mUpdating " <> sym
+                      <> maybe ""
+                         ((" since " <>) . cs
+                                         . formatTime defaultTimeLocale "%F")
+                         since
+                      <> "\x1b[0m"
           -- TODO: don't retrieve stock data for values already in db
           apiKey <- asks quandlApiKey
           rows <- liftIO $ scrapeStockData (cs sym) since apiKey
           -- TODO: use insertBy and collect failures
           res <- mapM (runDb . insertUnique) rows
+          $(logInfo) $ "\x1b[35m" <> sym <> " update done\x1b[0m"
           pure . or $ map isJust res
         updateStockData Nothing since = do
+          $(logInfo) $ "\x1b[33mUpdating all stocks"
+                      <> maybe ""
+                         ((" since " <>) . cs
+                                         . formatTime defaultTimeLocale "%F")
+                         since
+                      <> "\x1b[0m"
           selected <- runDb $ selectList [] []
           let stocks = entityVal <$> selected
               symbols = map (^. stockSymbol) stocks
           res <- mapM (flip updateStockData since . Just) symbols
+          $(logInfo) "\x1b[33mStocks update done\x1b[0m"
           pure $ or res
         updateNewsData :: Maybe Text -> App Bool
         updateNewsData (Just aname) = do
