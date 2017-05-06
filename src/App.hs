@@ -19,6 +19,7 @@ import Control.Monad.Except
 import Control.Monad.Logger
 import Control.Monad.Reader
 import Control.Monad.Trans.Control
+import Data.List
 import Data.Maybe
 import Data.String.Conversions
 import Data.Time
@@ -168,7 +169,7 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
           selected <- runDb $ selectList
             [TrendDataTrend_source_name ==. tsname
            , TrendDataDate >. s, TrendDataDate <. e]
-            [Asc TrendDataDate]
+            [Asc TrendDataDate, Desc TrendDataVolume]
           let points = entityVal <$> selected
           pure TrendDataInterval
             {
@@ -178,7 +179,7 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
                 , end = points ^? _last . trendDataDate
                 , splits = length selected
                 }
-            , trendData = points
+            , trendData = mostPopular points
             }
         getTrendDataInterval (Just _) _ _ = throwError
           err400 { errBody = "Bad Request, invalid dates" }
@@ -302,6 +303,9 @@ server = getStocks :<|> getTrendSources :<|> getNewsSources
                     $(logInfo) $ "\x1b[34mGot sentiment " <> cs (show average)
                                     <> " for " <> trend <> "\x1b[0m"
                     pure $ td & trendDataSentiment .~ average
+
+mostPopular :: [TrendData] -> [TrendData]
+mostPopular = nubBy (\td td' -> td ^. trendDataDate == td' ^. trendDataDate)
 
 initialiseDb :: (MonadLogger m, MonadReader Config m, MonadIO m,
                  MonadBaseControl IO m) => FilePath -> m ()
