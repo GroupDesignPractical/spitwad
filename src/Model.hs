@@ -62,6 +62,7 @@ instance ToJSON NewsData where
     [
       "date" .= (news ^. newsDataDate)
     , "headline" .= (news ^. newsDataHeadline)
+    , "description" .= (news ^. newsDataDescription)
     , "link" .= (news ^. newsDataLink)
     , "facebook_reacts" .= FacebookReacts
         (news ^. newsDataFacebook_react_like)
